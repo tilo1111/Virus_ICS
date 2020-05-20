@@ -1,0 +1,90 @@
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graphviz.hpp>
+#include <iostream>
+#include <algorithm>
+#include <random>	
+#include <ctime>
+#include <vector>
+
+std::mt19937 generator(time(0));
+
+struct Vertex		// defines structure of a Vertex
+{
+	std::string state;		// possible states 'S', 'E', 'I', 'R'
+	int n_state;			// for fast identifying nodes 1=S 2=E 3=I 4=R
+	int rank;				// rank of the node
+};
+
+typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, Vertex> Graph;
+
+
+Graph BA_network(int m, int m0, int n)
+{
+	Graph G;
+	int g_rank = 0;
+
+	if (m <= m0 && m0 <= n)
+	{
+		for (int i = 0; i < n; i++)	add_vertex({"S", 1, 0}, G);	// generating n starting nodes 
+
+		for (int i = 0; i < m0; i++)
+		{
+			for (int j = i+1; j < m0; j++)
+			{
+				add_edge(i, j, G);			// adding edges to starting m0 nodes to make complete graph
+				G[i].rank++;
+				G[j].rank++;
+				g_rank += 2;				// increasing rank of nodes and global rank (sum of all nodes ranks)
+			}
+		}
+
+		int x = m0;
+		std::vector<double> prob(n);
+		
+		while (x < n)
+		{
+			for (int i = 0; i < n; i++)		prob[i] = double(G[i].rank) / g_rank;		// probability of attaching i-th node to existing nodes
+			std::discrete_distribution<int> dist(prob.begin(), prob.end());		// discrete distribution of probability based on BA algorythm
+
+			for (int i = 0; i < m; i++)		// attaching new node with m edges to existing ones
+			{
+				int j = dist(generator);		// there is possibility to create the same edge several times - NEEDS TO BE REPAIRD
+				add_edge(x, j, G);
+				G[x].rank++;
+				G[j].rank++;
+				g_rank += 2;
+			}
+
+			x++;
+		}
+
+		return G;
+	}
+	else
+	{
+		std::cout << "Wrong parameters" << std::endl;		// if wrong parameters return empty graph with a note
+		return G;
+	}
+}
+
+int main()
+{
+	int n = 10;	// number of nodes
+	int m0 = 3;		// initial nodes	m0 <= n
+	int m = 2;		// number of edges of added node; m <= m0
+
+	Graph G = BA_network(m, m0, n);
+
+	boost::write_graphviz(std::cout, G);		// prints graph's nodes and edges in a list
+
+	std::cout << "state getter " << get(&Vertex::state, G)[0] << std::endl;
+	std::cout << "n_state getter " << get(&Vertex::n_state, G)[0] << std::endl;
+	std::cout << "rank getter " << get(&Vertex::rank, G)[0] << std::endl;
+	
+
+
+
+
+
+	return 0;
+}
