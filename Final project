@@ -5,8 +5,6 @@
 #include <random>	
 #include <ctime>
 #include <vector>
-#include <fstream>
-
 
 std::mt19937 generator(time(0));
 
@@ -15,35 +13,12 @@ struct Vertex		// defines structure of a Vertex
 	std::string state;		// possible states 'S', 'E', 'I', 'R'
 	int n_state;			// for fast identifying nodes 1=S 2=E 3=I 4=R
 	int rank;				// rank of the node
-	int timer;				// in case of time bound recovery
 };
 
 typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, Vertex> Graph;
 
-double* ini_parameters()      // function reads from ini file
-{
-	double  ini_parameters[6];
-	std::fstream ini;
-	std::string line;
-	ini.open("ini_parameters.txt", std::ios::in);
-	if (ini.good() == 0)
-	{
-		std::cout << "Blad pliku." << std::endl;
-		return 0;
-	}
 
-	int i = 0;
-	do
-	{
-		ini >> ini_parameters[i];
-		i++;
-	} while (getline(ini, line) && i <= 5);
-
-	return ini_parameters;
-}
-
-
-Graph BA_network(int m, int m0, int n)      // function generates Barabasi-Albert network
+Graph BA_network(int m, int m0, int n)
 {
 	Graph G;
 	int g_rank = 0;
@@ -69,15 +44,14 @@ Graph BA_network(int m, int m0, int n)      // function generates Barabasi-Alber
 		while (x < n)
 		{
 			for (int i = 0; i < n; i++)		prob[i] = double(G[i].rank) / g_rank;		// probability of attaching i-th node to existing nodes
+			std::discrete_distribution<int> dist(prob.begin(), prob.end());		// discrete distribution of probability based on BA algorythm
 
 			for (int i = 0; i < m; i++)		// attaching new node with m edges to existing ones
 			{
-				std::discrete_distribution<int> dist(prob.begin(), prob.end());		// discrete distribution of probability based on BA algorythm
-				int new_node = dist(generator);		// there is possibility to create the same edge several times - NEEDS TO BE REPAIRD
-				prob[new_node] = 0;					// zeroing probability of choosing new_node second time
-				add_edge(x, new_node, G);
+				int j = dist(generator);		// there is possibility to create the same edge several times - NEEDS TO BE REPAIRD
+				add_edge(x, j, G);
 				G[x].rank++;
-				G[new_node].rank++;
+				G[j].rank++;
 				g_rank += 2;
 			}
 
@@ -93,46 +67,22 @@ Graph BA_network(int m, int m0, int n)      // function generates Barabasi-Alber
 	}
 }
 
-void graph_save(Graph G, int n)   // saves graph into two files nodes and edges
-{
-	std::fstream nodes;
-	std::fstream edges;
-	nodes.open("nodes.txt", std::ios::out);
-	edges.open("edges.txt", std::ios::out);
-
-	for (int i = 0; i < n; i++)
-	{
-		nodes << i << " " << G[i].state << std::endl;
-
-		auto neighbours = boost::adjacent_vertices(i, G);
-		for (auto x : make_iterator_range(neighbours))
-		{
-			if(x > i) edges << i << " " << x << std::endl;
-		}
-	}
-
-	nodes.close();
-	edges.close();
-}
-
 int main()
 {
-
-	double* parameters = ini_parameters();		// reading parameters from file
-	int n = parameters[0];	// number of nodes
-	int m0 = parameters[1];		// initial nodes;	m0 <= n
-	int m = parameters[2];		// number of edges connecting added node;	m <= m0
-	double SI = parameters[3];	// probability S->I
-	double IR = parameters[4];	// probability I->R
-	double RS = parameters[5];	// probability R->S
+	int n = 10;	// number of nodes
+	int m0 = 3;		// initial nodes	m0 <= n
+	int m = 2;		// number of edges of added node; m <= m0
 
 	Graph G = BA_network(m, m0, n);
+
+	boost::write_graphviz(std::cout, G);		// prints graph's nodes and edges in a list
 
 	std::cout << "state getter " << get(&Vertex::state, G)[0] << std::endl;
 	std::cout << "n_state getter " << get(&Vertex::n_state, G)[0] << std::endl;
 	std::cout << "rank getter " << get(&Vertex::rank, G)[0] << std::endl;
+	
 
-	graph_save(G, n);		// saveing graph into two files
+
 
 
 
