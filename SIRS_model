@@ -9,21 +9,26 @@
 #include <string.h>
 
 
+
 std::mt19937 generator(time(0));
 
 struct Vertex		// defines structure of a Vertex
 {
+
 	int n_state;			// for fast identifying nodes 1=S 2=E 3=I 4=R
 	int rank;				// rank of the node
 	std::vector<int> neighbours;				// in case of time bound recovery
 	bool changed = 0;		// checks if node's state was changed this itteration
+
 };
 
 typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, Vertex> Graph;
 
 double* ini_parameters()
 {
+
 	double  ini_parameters[9];
+
 	std::fstream ini;
 	std::string line;
 	ini.open("ini_parameters.txt", std::ios::in);
@@ -38,7 +43,9 @@ double* ini_parameters()
 	{
 		ini >> ini_parameters[i];
 		i++;
+
 	} while (getline(ini, line) && i <= 8);
+
 
 	return ini_parameters;
 }
@@ -51,11 +58,13 @@ Graph BA_network(int m, int m0, int n)
 
 	if (m <= m0 && m0 <= n)
 	{
+
 		for (int i = 0; i < n; i++)	add_vertex({ 1, 0 }, G);	// generating n starting nodes 
 
 		for (int i = 0; i < m0; i++)
 		{
 			for (int j = i + 1; j <= m0; j++)
+
 			{
 				add_edge(i, j, G);			// adding edges to starting m0 nodes to make complete graph
 				G[i].rank++;
@@ -103,12 +112,16 @@ void graph_save(Graph G, int n)
 
 	for (int i = 0; i < n; i++)
 	{
+
 		nodes << i << " " << G[i].n_state << std::endl;
+
 
 		auto neighbours = boost::adjacent_vertices(i, G);
 		for (auto x : make_iterator_range(neighbours))
 		{
+
 			if (x > i) edges << i << " " << x << std::endl;
+
 		}
 	}
 
@@ -118,6 +131,7 @@ void graph_save(Graph G, int n)
 
 int main()
 {
+
 	double* parameters = ini_parameters();		// reading parameters from file
 	int n = parameters[0];	// number of nodes
 	int m0 = parameters[1];		// initial nodes;	m0 <= n
@@ -125,6 +139,7 @@ int main()
 	double SI = parameters[3];	// probability S->I
 	double IR = parameters[4];	// probability I->R
 	double RS = parameters[5];	// probability R->S
+
 	int ini_sick_population = int(parameters[6]/100 *n); //%
 	int time = parameters[7]; // number of iterations
 	int avg = parameters[8];
@@ -288,6 +303,7 @@ int main()
 			}
 		}
 	}
+
 
 	return 0;
 }
