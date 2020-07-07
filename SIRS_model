@@ -6,23 +6,29 @@
 #include <ctime>
 #include <vector>
 #include <fstream>
+#include <string.h>
+
 
 
 std::mt19937 generator(time(0));
 
 struct Vertex		// defines structure of a Vertex
 {
-	std::string state;		// possible states 'S', 'E', 'I', 'R'
+
 	int n_state;			// for fast identifying nodes 1=S 2=E 3=I 4=R
 	int rank;				// rank of the node
-	int timer;				// in case of time bound recovery
+	std::vector<int> neighbours;				// in case of time bound recovery
+	bool changed = 0;		// checks if node's state was changed this itteration
+
 };
 
 typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, Vertex> Graph;
 
 double* ini_parameters()
 {
-	double  ini_parameters[6];
+
+	double  ini_parameters[9];
+
 	std::fstream ini;
 	std::string line;
 	ini.open("ini_parameters.txt", std::ios::in);
@@ -37,7 +43,9 @@ double* ini_parameters()
 	{
 		ini >> ini_parameters[i];
 		i++;
-	} while (getline(ini, line) && i <= 5);
+
+	} while (getline(ini, line) && i <= 8);
+
 
 	return ini_parameters;
 }
@@ -50,11 +58,13 @@ Graph BA_network(int m, int m0, int n)
 
 	if (m <= m0 && m0 <= n)
 	{
-		for (int i = 0; i < n; i++)	add_vertex({"S", 1, 0}, G);	// generating n starting nodes 
+
+		for (int i = 0; i < n; i++)	add_vertex({ 1, 0 }, G);	// generating n starting nodes 
 
 		for (int i = 0; i < m0; i++)
 		{
-			for (int j = i+1; j < m0; j++)
+			for (int j = i + 1; j <= m0; j++)
+
 			{
 				add_edge(i, j, G);			// adding edges to starting m0 nodes to make complete graph
 				G[i].rank++;
@@ -65,7 +75,7 @@ Graph BA_network(int m, int m0, int n)
 
 		int x = m0;
 		std::vector<double> prob(n);
-		
+
 		while (x < n)
 		{
 			for (int i = 0; i < n; i++)		prob[i] = double(G[i].rank) / g_rank;		// probability of attaching i-th node to existing nodes
@@ -102,12 +112,16 @@ void graph_save(Graph G, int n)
 
 	for (int i = 0; i < n; i++)
 	{
-		nodes << i << " " << G[i].state << std::endl;
+
+		nodes << i << " " << G[i].n_state << std::endl;
+
 
 		auto neighbours = boost::adjacent_vertices(i, G);
 		for (auto x : make_iterator_range(neighbours))
 		{
-			if(x > i) edges << i << " " << x << std::endl;
+
+			if (x > i) edges << i << " " << x << std::endl;
+
 		}
 	}
 
@@ -126,14 +140,169 @@ int main()
 	double IR = parameters[4];	// probability I->R
 	double RS = parameters[5];	// probability R->S
 
-	Graph G = BA_network(m, m0, n);
+	int ini_sick_population = int(parameters[6]/100 *n); //%
+	int time = parameters[7]; // number of iterations
+	int avg = parameters[8];
 
-	std::cout << "state getter " << get(&Vertex::state, G)[0] << std::endl;
-	std::cout << "n_state getter " << get(&Vertex::n_state, G)[0] << std::endl;
-	std::cout << "rank getter " << get(&Vertex::rank, G)[0] << std::endl;
+	std::cout << n << std::endl;
+	std::cout << m0 << std::endl;
+	std::cout << m << std::endl;
+	std::cout << SI << std::endl;
+	std::cout << IR << std::endl;
+	std::cout << RS << std::endl;
+	std::cout << ini_sick_population << std::endl << std:: endl;
+
+	Graph G = BA_network(m, m0, n);
 
 	graph_save(G, n);		// saveing graph into two files
 
+	//creating node and edge arrays
+	for (int i = 0; i < n; i++)
+	{
+		auto connection = boost::adjacent_vertices(i, G);
+		for (auto x : make_iterator_range(connection))
+		{
+			G[i].neighbours.push_back(x);
+		}
+	}
+
+	std::uniform_real_distribution<double> diss(0.0, double(n));
+	double pp; // probability
+
+	std::vector<double> S_intime(time, 0.0);
+	std::vector<double> R_intime(time, 0.0);
+	std::vector<double> I_intime(time, 0.0);
+	std::uniform_real_distribution<double> dis(0.0, 1.0);
+	double p; // probability
+	
+	double S = 0;
+	double I = 0;
+	double R = 0;
+
+	for (double p1 = 0.2; p1 <= 0.8; p1 += 0.3)
+	{
+		for (double p2 = 0.2; p2 <= 0.8; p2 += 0.3)
+		{
+			for (double p3 = 0.2; p3 <= 0.8; p3 += 0.3)
+			{
+				SI = p1;
+				IR = p2;
+				RS = p3;
+
+				for (int it = 0; it < avg; it++)
+				{
+					for (int i = 0; i < n; i++)
+					{
+						G[i].n_state = 1;
+					}
+					S = 0;
+					I = 0;
+					R = 0;
+
+					for (int i = 0; i < ini_sick_population; i++)
+					{
+						pp = diss(generator);
+						G[pp].n_state = 3;
+					}
+
+					//checking values of S, I in initial network
+					for (int i = 0; i < n; i++)
+					{
+						if (G[i].n_state == 1)
+							S++;
+						if (G[i].n_state == 3)
+							I++;
+					}
+
+					S_intime[0] += S;
+					I_intime[0] += I;
+
+					//Virus spreading
+					for (int t = 1; t < time; t++)
+					{
+						for (int i = 0; i < n; i++)		G[i].changed = 0;
+
+						for (int i = 0; i < n; i++)
+						{
+							if (G[i].n_state == 3 && G[i].changed == 0)
+							{
+								for (int j = 0; j < G[i].neighbours.size(); j++)
+								{
+									int x = G[i].neighbours[j];
+									if (G[x].n_state == 1 && G[j].changed == 0)
+									{
+										p = dis(generator); //probability of transition
+										if (p < SI) {
+											G[x].n_state = 3; //transition of a virus
+											G[x].changed = 1; //will not interact in this iteration
+										}
+									}
+								}
+							}
+
+							if (G[i].n_state == 3 && G[i].changed == 0)
+							{
+								p = dis(generator);
+								if (p < IR)
+								{
+									G[i].n_state = 4;
+									G[i].changed = 1;
+								}
+							}
+							else if (G[i].n_state == 4 && G[i].changed == 0)
+							{
+								p = dis(generator);
+								if (p < RS)
+								{
+									G[i].n_state = 1;
+									G[i].changed = 1;
+								}
+							}
+						}
+
+						S = 0;
+						I = 0;
+						R = 0;
+						
+						for (int i = 0; i < n; i++) {
+							if (G[i].n_state == 1)
+								S++;
+							else if (G[i].n_state == 3)
+								I++;
+							else if (G[i].n_state == 4)
+								R++;
+						}
+
+						S_intime[t] += S;
+						R_intime[t] += R;
+						I_intime[t] += I;
+					}
+				}
+
+				//saving to file
+				std::fstream virus_spread;
+				std::stringstream stream1, stream2, stream3;
+				stream1 << std::fixed << std::setprecision(1) << SI;
+				std::string si = stream1.str();
+				stream2 << std::fixed << std::setprecision(1) << RS;
+				std::string rs = stream2.str();
+				stream3 << std::fixed << std::setprecision(1) << IR;
+				std::string ir = stream3.str();
+
+				virus_spread.open("virus_spread_SI" + si + "_IR" + ir + "_RS" + rs + ".txt", std::ios::out);
+				for (int x = 0; x < time; x++) 
+				{
+					virus_spread <<  x << "\t" << S_intime[x]/avg << "\t" << I_intime[x]/avg << "\t" << R_intime[x]/avg << std::endl;
+					S_intime[x] = 0;
+					R_intime[x] = 0;
+					I_intime[x] = 0;
+				}
+
+				virus_spread.close();
+
+			}
+		}
+	}
 
 
 	return 0;
